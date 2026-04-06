@@ -245,7 +245,6 @@ export default function App() {
         </section>
 
         <section className="status-row">
-          <Badge>{catalogProducts.length > 0 ? "Каталог подключён" : "Ждём данные"}</Badge>
         </section>
 
         {notice ? (

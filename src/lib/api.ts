@@ -42,8 +42,10 @@ export const api = {
   },
   updateProduct(id: number, input: ProductMutationInput): Promise<Product> {
     return request<Product>(`/products/${id}`, {
-      method: "PUT",
-      body: buildProductFormData(input),
+      method: "POST",
+      body: buildProductFormData(input, {
+        methodOverride: "PUT",
+      }),
     });
   },
   deleteProduct(id: number): Promise<void> {
@@ -62,8 +64,10 @@ export const api = {
   },
   updateDish(id: number, input: DishMutationInput): Promise<Dish> {
     return request<Dish>(`/dishes/${id}`, {
-      method: "PUT",
-      body: buildDishFormData(input),
+      method: "POST",
+      body: buildDishFormData(input, {
+        methodOverride: "PUT",
+      }),
     });
   },
   deleteDish(id: number): Promise<void> {
@@ -124,8 +128,13 @@ function toQueryString(filters: object): string {
   return query ? `?${query}` : "";
 }
 
-function buildProductFormData(input: ProductMutationInput): FormData {
+function buildProductFormData(
+  input: ProductMutationInput,
+  options?: { methodOverride?: "PUT" },
+): FormData {
   const formData = new FormData();
+
+  applyMethodOverride(formData, options);
 
   formData.set("name", input.name);
   appendPhotos(formData, input.photos);
@@ -145,8 +154,13 @@ function buildProductFormData(input: ProductMutationInput): FormData {
   return formData;
 }
 
-function buildDishFormData(input: DishMutationInput): FormData {
+function buildDishFormData(
+  input: DishMutationInput,
+  options?: { methodOverride?: "PUT" },
+): FormData {
   const formData = new FormData();
+
+  applyMethodOverride(formData, options);
 
   formData.set("name", input.name);
   appendPhotos(formData, input.photos);
@@ -196,4 +210,15 @@ function appendFlags(
   formData.set("flags[vegan]", flags.vegan ? "1" : "0");
   formData.set("flags[gluten_free]", flags.gluten_free ? "1" : "0");
   formData.set("flags[sugar_free]", flags.sugar_free ? "1" : "0");
+}
+
+function applyMethodOverride(
+  formData: FormData,
+  options?: { methodOverride?: "PUT" },
+): void {
+  if (!options?.methodOverride) {
+    return;
+  }
+
+  formData.set("_method", options.methodOverride);
 }

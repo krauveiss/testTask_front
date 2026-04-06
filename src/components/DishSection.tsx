@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../lib/api";
 import {
   buildDishDraft,
@@ -9,11 +9,10 @@ import {
   getFieldError,
   parseNumberInput,
   parseOptionalNumberInput,
-  photoDraftsToPayload,
+  prepareDishPhotoUploadPayload,
   releasePhotoDrafts,
   roundToTwo,
   validatePhotos,
-  validateDishNutrition,
 } from "../lib/recipeRules";
 import {
   DISH_CATEGORIES,
@@ -154,7 +153,7 @@ export function DishSection({
             <input
               type="search"
               value={filters.search}
-              placeholder="Например, !суп грибной"
+              placeholder="Название"
               onChange={(event) => onFiltersChange({ search: event.target.value })}
             />
           </label>
@@ -353,18 +352,20 @@ function DishFormModal({
   const initialState = useMemo(() => createInitialDishFormState(editor), [editor]);
   const [form, setForm] = useState<DishFormState>(initialState);
   const [manualNutrition, setManualNutrition] = useState<Record<NutritionKey, boolean>>(
-    createInitialManualNutrition(editor),
+    createInitialManualNutrition(editor, productsById),
   );
   const [errors, setErrors] = useState<ApiFieldErrors | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const previousIngredientsSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     setForm(initialState);
-    setManualNutrition(createInitialManualNutrition(editor));
+    setManualNutrition(createInitialManualNutrition(editor, productsById));
     setErrors(null);
     setGeneralError(null);
-  }, [editor, initialState]);
+    previousIngredientsSignatureRef.current = null;
+  }, [editor, initialState, productsById]);
 
   useEffect(() => {
     return () => {
@@ -380,6 +381,13 @@ function DishFormModal({
           quantity: parseNumberInput(ingredient.quantity),
         }))
         .filter((ingredient) => Number.isFinite(ingredient.product_id)),
+    [form.ingredients],
+  );
+  const ingredientsSignature = useMemo(
+    () =>
+      form.ingredients
+        .map((ingredient) => `${ingredient.product_id}:${ingredient.quantity}`)
+        .join("|"),
     [form.ingredients],
   );
 
@@ -406,7 +414,6 @@ function DishFormModal({
     () => buildFlagRestrictions(parsedIngredients, productsById),
     [parsedIngredients, productsById],
   );
-
   const resolvedCategorySource = form.category
     ? "выбрана в поле формы"
     : draft.macro_category
@@ -447,6 +454,25 @@ function DishFormModal({
     });
   }, [draft.available_flags, draft.calculated_nutrition, manualNutrition]);
 
+  useEffect(() => {
+    if (previousIngredientsSignatureRef.current === null) {
+      previousIngredientsSignatureRef.current = ingredientsSignature;
+      return;
+    }
+
+    if (previousIngredientsSignatureRef.current === ingredientsSignature) {
+      return;
+    }
+
+    previousIngredientsSignatureRef.current = ingredientsSignature;
+    setManualNutrition({
+      calories: false,
+      proteins: false,
+      fats: false,
+      carbohydrates: false,
+    });
+  }, [ingredientsSignature]);
+
   const activeEditor = editor;
 
   if (!activeEditor) {
@@ -457,7 +483,7 @@ function DishFormModal({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextErrors = validateDishFormStrict(form, draft, productsById);
+    const nextErrors = validateDishFormStrict(form, draft, productsById, manualNutrition);
 
     setErrors(nextErrors);
     setGeneralError(null);
@@ -469,16 +495,20 @@ function DishFormModal({
     setSaving(true);
 
     try {
+      const effectiveNutrition = resolveEffectiveDishNutrition(
+        form,
+        draft.calculated_nutrition,
+        manualNutrition,
+      );
       const payload: DishMutationInput = {
         name: form.name.trim(),
-        photos: photoDraftsToPayload(form.photos),
-        calories: resolveDishNutritionValue(form.calories, draft.calculated_nutrition.calories),
-        proteins: resolveDishNutritionValue(form.proteins, draft.calculated_nutrition.proteins),
-        fats: resolveDishNutritionValue(form.fats, draft.calculated_nutrition.fats),
-        carbohydrates: resolveDishNutritionValue(
-          form.carbohydrates,
-          draft.calculated_nutrition.carbohydrates,
-        ),
+        photos: await prepareDishPhotoUploadPayload(form.photos),
+        calories: manualNutrition.calories ? effectiveNutrition.calories : null,
+        proteins: manualNutrition.proteins ? effectiveNutrition.proteins : null,
+        fats: manualNutrition.fats ? effectiveNutrition.fats : null,
+        carbohydrates: manualNutrition.carbohydrates
+          ? effectiveNutrition.carbohydrates
+          : null,
         ingredients: form.ingredients.map((ingredient) => ({
           product_id: Number(ingredient.product_id),
           quantity: roundToTwo(parseNumberInput(ingredient.quantity)),
@@ -545,7 +575,7 @@ function DishFormModal({
             type="text"
             value={form.name}
             minLength={2}
-            placeholder="Например, !суп Грибной крем"
+            placeholder="Например, Грибной крем"
             onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
           />
           <FieldErrorText error={getFieldError(errors, "name")} />
@@ -774,8 +804,12 @@ function DishFormModal({
                 step="0.01"
                 value={form[key]}
                 onChange={(event) => {
-                  setManualNutrition((prev) => ({ ...prev, [key]: true }));
-                  setForm((prev) => ({ ...prev, [key]: event.target.value }));
+                  const nextValue = event.target.value;
+                  setManualNutrition((prev) => ({
+                    ...prev,
+                    [key]: nextValue.trim() !== "",
+                  }));
+                  setForm((prev) => ({ ...prev, [key]: nextValue }));
                 }}
               />
               <FieldErrorText error={getFieldError(errors, key)} />
@@ -826,15 +860,15 @@ function DishFormModal({
         </div>
 
         <div className="subtle-card">
-          <strong>Контроль БЖУ на порцию</strong>
+          <strong>Сводка БЖУ на порцию</strong>
           <p>
-            Сумма БЖУ в порции:{" "}
+            Текущая сумма БЖУ в порции по составу:{" "}
             {formatNumber(
               parseNumberInput(form.proteins) +
               parseNumberInput(form.fats) +
               parseNumberInput(form.carbohydrates),
             )}{" "}
-            г из {formatNumber(parseNumberInput(form.portion_size))} г.
+            г.
           </p>
         </div>
       </form>
@@ -880,6 +914,7 @@ function createInitialDishFormState(editor: DishEditorState): DishFormState {
 
 function createInitialManualNutrition(
   editor: DishEditorState,
+  productsById: Map<number, Product>,
 ): Record<NutritionKey, boolean> {
   if (!editor || editor.mode === "create") {
     return {
@@ -891,14 +926,23 @@ function createInitialManualNutrition(
   }
 
   const { dish } = editor;
+  const draft = buildDishDraft(
+    dish.name,
+    dish.category,
+    dish.ingredients.map((ingredient) => ({
+      product_id: ingredient.product_id,
+      quantity: ingredient.quantity,
+    })),
+    productsById,
+  );
 
   return {
-    calories: !numbersEqual(dish.calories, dish.calculated_nutrition.calories),
-    proteins: !numbersEqual(dish.proteins, dish.calculated_nutrition.proteins),
-    fats: !numbersEqual(dish.fats, dish.calculated_nutrition.fats),
+    calories: !numbersEqual(dish.calories, draft.calculated_nutrition.calories),
+    proteins: !numbersEqual(dish.proteins, draft.calculated_nutrition.proteins),
+    fats: !numbersEqual(dish.fats, draft.calculated_nutrition.fats),
     carbohydrates: !numbersEqual(
       dish.carbohydrates,
-      dish.calculated_nutrition.carbohydrates,
+      draft.calculated_nutrition.carbohydrates,
     ),
   };
 }
@@ -909,9 +953,6 @@ function validateDishForm(
 ): ApiFieldErrors {
   const errors: ApiFieldErrors = {};
   const portionSize = parseNumberInput(form.portion_size);
-  const proteins = parseNumberInput(form.proteins);
-  const fats = parseNumberInput(form.fats);
-  const carbohydrates = parseNumberInput(form.carbohydrates);
 
   if (form.name.trim().length < 2) {
     errors.name = ["Название должно содержать минимум 2 символа."];
@@ -960,20 +1001,16 @@ function validateDishForm(
     errors.calories = ["Калорийность не может быть отрицательной."];
   }
 
-  if (proteins < 0) {
+  if (parseNumberInput(form.proteins) < 0) {
     errors.proteins = ["Белки не могут быть отрицательными."];
   }
 
-  if (fats < 0) {
+  if (parseNumberInput(form.fats) < 0) {
     errors.fats = ["Жиры не могут быть отрицательными."];
   }
 
-  if (carbohydrates < 0) {
+  if (parseNumberInput(form.carbohydrates) < 0) {
     errors.carbohydrates = ["Углеводы не могут быть отрицательными."];
-  }
-
-  if (!validateDishNutrition(proteins, fats, carbohydrates, portionSize)) {
-    errors.proteins = ["Сумма белков, жиров и углеводов не может превышать размер порции."];
   }
 
   return errors;
@@ -983,14 +1020,16 @@ function validateDishFormStrict(
   form: DishFormState,
   draft: ReturnType<typeof buildDishDraft>,
   productsById: Map<number, Product>,
+  manualNutrition: Record<NutritionKey, boolean>,
 ): ApiFieldErrors {
   const errors: ApiFieldErrors = {};
   const portionSize = parseOptionalNumberInput(form.portion_size);
-  const calories = parseOptionalNumberInput(form.calories);
-  const proteins = parseOptionalNumberInput(form.proteins);
-  const fats = parseOptionalNumberInput(form.fats);
-  const carbohydrates = parseOptionalNumberInput(form.carbohydrates);
-  const photosError = validatePhotos(form.photos, { allowRemote: false });
+  const effectiveNutrition = resolveEffectiveDishNutrition(
+    form,
+    draft.calculated_nutrition,
+    manualNutrition,
+  );
+  const photosError = validatePhotos(form.photos);
 
   if (form.name.trim().length < 2) {
     errors.name = ["Название должно содержать минимум 2 символа."];
@@ -1041,38 +1080,20 @@ function validateDishFormStrict(
     }
   });
 
-  if (calories === null) {
-    errors.calories = ["Калорийность должна быть рассчитана или заполнена вручную."];
-  } else if (calories < 0) {
+  if (effectiveNutrition.calories < 0) {
     errors.calories = ["Калорийность не может быть отрицательной."];
   }
 
-  if (proteins === null) {
-    errors.proteins = ["Белки должны быть рассчитаны или заполнены вручную."];
-  } else if (proteins < 0) {
+  if (effectiveNutrition.proteins < 0) {
     errors.proteins = ["Белки не могут быть отрицательными."];
   }
 
-  if (fats === null) {
-    errors.fats = ["Жиры должны быть рассчитаны или заполнены вручную."];
-  } else if (fats < 0) {
+  if (effectiveNutrition.fats < 0) {
     errors.fats = ["Жиры не могут быть отрицательными."];
   }
 
-  if (carbohydrates === null) {
-    errors.carbohydrates = ["Углеводы должны быть рассчитаны или заполнены вручную."];
-  } else if (carbohydrates < 0) {
+  if (effectiveNutrition.carbohydrates < 0) {
     errors.carbohydrates = ["Углеводы не могут быть отрицательными."];
-  }
-
-  if (
-    portionSize !== null &&
-    proteins !== null &&
-    fats !== null &&
-    carbohydrates !== null &&
-    !validateDishNutrition(proteins, fats, carbohydrates, portionSize)
-  ) {
-    errors.proteins = ["Сумма белков, жиров и углеводов не может превышать размер порции."];
   }
 
   return errors;
@@ -1086,6 +1107,27 @@ function resolveDishNutritionValue(value: string, fallback: number): number {
   const parsed = parseOptionalNumberInput(value);
 
   return parsed === null ? roundToTwo(fallback) : roundToTwo(parsed);
+}
+
+function resolveEffectiveDishNutrition(
+  form: DishFormState,
+  calculatedNutrition: Nutrition,
+  manualNutrition: Record<NutritionKey, boolean>,
+): Nutrition {
+  return {
+    calories: manualNutrition.calories
+      ? resolveDishNutritionValue(form.calories, calculatedNutrition.calories)
+      : roundToTwo(calculatedNutrition.calories),
+    proteins: manualNutrition.proteins
+      ? resolveDishNutritionValue(form.proteins, calculatedNutrition.proteins)
+      : roundToTwo(calculatedNutrition.proteins),
+    fats: manualNutrition.fats
+      ? resolveDishNutritionValue(form.fats, calculatedNutrition.fats)
+      : roundToTwo(calculatedNutrition.fats),
+    carbohydrates: manualNutrition.carbohydrates
+      ? resolveDishNutritionValue(form.carbohydrates, calculatedNutrition.carbohydrates)
+      : roundToTwo(calculatedNutrition.carbohydrates),
+  };
 }
 
 function buildFlagRestrictions(

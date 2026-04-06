@@ -7,7 +7,7 @@ import {
   getFieldError,
   parseNumberInput,
   parseOptionalNumberInput,
-  photoDraftsToPayload,
+  preparePhotoUploadPayload,
   releasePhotoDrafts,
   validatePhotos,
   validateProductNutrition,
@@ -445,7 +445,7 @@ function ProductFormModal({
     try {
       const payload: ProductMutationInput = {
         name: form.name.trim(),
-        photos: photoDraftsToPayload(form.photos),
+        photos: await preparePhotoUploadPayload(form.photos),
         calories: parseNumberInput(form.calories),
         proteins: parseNumberInput(form.proteins),
         fats: parseNumberInput(form.fats),

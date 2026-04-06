@@ -71,6 +71,28 @@ describe("recipe rules", () => {
     expect(draft.available_flags.gluten_free).toBe(false);
   });
 
+  it("calculates dish nutrition only from ingredient quantities", () => {
+    const draft = buildDishDraft(
+      "Bowl",
+      null,
+      [
+        { product_id: 1, quantity: 150 },
+        { product_id: 2, quantity: 50 },
+      ],
+      new Map([
+        [1, productA],
+        [2, productB],
+      ]),
+    );
+
+    expect(draft.calculated_nutrition).toEqual({
+      calories: 350,
+      proteins: 27,
+      fats: 11,
+      carbohydrates: 38.5,
+    });
+  });
+
   it("drops unavailable flags", () => {
     expect(
       clampFlags(

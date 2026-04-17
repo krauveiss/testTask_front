@@ -130,7 +130,7 @@ export function ProductSection({
 
   return (
     <div className="section-stack">
-      <section className="panel-card">
+      <section className="panel-card" data-testid="products-section">
         <div className="panel-head">
           <div>
             <p className="eyebrow">Продукты</p>
@@ -140,6 +140,7 @@ export function ProductSection({
               type="button"
               className="secondary-button"
               onClick={() => void onRefresh()}
+              data-testid="refresh-products-button"
             >
               Обновить
             </button>
@@ -147,6 +148,7 @@ export function ProductSection({
               type="button"
               className="primary-button"
               onClick={() => setEditor({ mode: "create" })}
+              data-testid="create-product-button"
             >
               Новый продукт
             </button>
@@ -161,6 +163,7 @@ export function ProductSection({
               value={filters.search}
               placeholder="Например, овсяное молоко"
               onChange={(event) => onFiltersChange({ search: event.target.value })}
+              data-testid="product-search-input"
             />
           </label>
           <label>
@@ -168,6 +171,7 @@ export function ProductSection({
             <select
               value={filters.category}
               onChange={(event) => onFiltersChange({ category: event.target.value })}
+              data-testid="product-category-filter"
             >
               <option value="">Все категории</option>
               {PRODUCT_CATEGORIES.map((category) => (
@@ -184,6 +188,7 @@ export function ProductSection({
               onChange={(event) =>
                 onFiltersChange({ cooking_requirement: event.target.value })
               }
+              data-testid="product-cooking-filter"
             >
               <option value="">Любая</option>
               {COOKING_REQUIREMENTS.map((option) => (
@@ -202,6 +207,7 @@ export function ProductSection({
                   sort_by: event.target.value as ProductFilters["sort_by"],
                 })
               }
+              data-testid="product-sort-by"
             >
               <option value="name">Название</option>
               <option value="calories">Калорийность</option>
@@ -219,6 +225,7 @@ export function ProductSection({
                   sort_direction: event.target.value as ProductFilters["sort_direction"],
                 })
               }
+              data-testid="product-sort-direction"
             >
               <option value="asc">По возрастанию</option>
               <option value="desc">По убыванию</option>
@@ -236,11 +243,12 @@ export function ProductSection({
                   onFiltersChange({ [flagKey]: event.target.checked } as Partial<ProductFilters>)
                 }
                 style={{width: '50px'}}
+                data-testid={`product-flag-${flagKey}`}
               />
               <span>{FLAG_LABELS[flagKey]}</span>
             </label>
           ))}
-          <button type="button" className="ghost-button" onClick={onResetFilters}>
+          <button type="button" className="ghost-button" onClick={onResetFilters} data-testid="reset-filters-button">
             Сбросить фильтры
           </button>
           <span className="subtle-hint">
@@ -272,7 +280,7 @@ export function ProductSection({
         ) : (
           <div className="card-grid">
             {products.map((product) => (
-              <article key={product.id} className="entity-card">
+              <article key={product.id} className="entity-card" data-testid={`product-card-${product.id}`}>
                 <PhotoGallery photos={product.photos.slice(0, 1)} alt={product.name} compact />
                 <div className="entity-card-head">
                   <div>
@@ -296,6 +304,7 @@ export function ProductSection({
                     type="button"
                     className="ghost-button"
                     onClick={() => setDetails(product)}
+                    data-testid={`product-details-button-${product.id}`}
                   >
                     Подробнее
                   </button>
@@ -303,6 +312,7 @@ export function ProductSection({
                     type="button"
                     className="secondary-button"
                     onClick={() => setEditor({ mode: "edit", product })}
+                    data-testid={`product-edit-button-${product.id}`}
                   >
                     Изменить
                   </button>
@@ -310,6 +320,7 @@ export function ProductSection({
                     type="button"
                     className="danger-button"
                     onClick={() => void handleDelete(product)}
+                    data-testid={`product-delete-button-${product.id}`}
                   >
                     Удалить
                   </button>
@@ -332,6 +343,7 @@ export function ProductSection({
         title={details?.name ?? ""}
         subtitle={details ? `Продукт #${details.id}` : undefined}
         onClose={() => setDetails(null)}
+        data-testid="product-details-modal"
       >
         {details ? (
           <div className="detail-stack">
@@ -361,11 +373,13 @@ export function ProductSection({
         open={blocking !== null}
         title={blocking ? `Удаление недоступно: ${blocking.productName}` : ""}
         onClose={() => setBlocking(null)}
+        data-testid="product-delete-blocking-modal"
         actions={
           <button
             type="button"
             className="primary-button"
             onClick={() => setBlocking(null)}
+            data-testid="product-blocking-acknowledge-button"
           >
             Понятно
           </button>
@@ -486,9 +500,10 @@ function ProductFormModal({
         editingProduct ? `Редактирование: ${editingProduct.name}` : "Новый продукт"
       }
       onClose={onClose}
+      data-testid="product-modal"
       actions={
         <>
-          <button type="button" className="ghost-button" onClick={onClose}>
+          <button type="button" className="ghost-button" onClick={onClose} data-testid="product-cancel-button">
             Отмена
           </button>
           <button
@@ -496,13 +511,14 @@ function ProductFormModal({
             form="product-form"
             className="primary-button"
             disabled={saving}
+            data-testid="product-submit-button"
           >
             {saving ? "Сохраняю..." : "Сохранить"}
           </button>
         </>
       }
     >
-      <form id="product-form" className="form-stack" onSubmit={handleSubmit}>
+      <form id="product-form" className="form-stack" onSubmit={handleSubmit} data-testid="product-form">
         {generalError ? <SectionMessage tone="error">{generalError}</SectionMessage> : null}
 
         <label className="form-field">
@@ -512,6 +528,7 @@ function ProductFormModal({
             value={form.name}
             minLength={2}
             onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+            data-testid="product-name-input"
           />
           <FieldErrorText error={getFieldError(errors, "name")} />
         </label>
@@ -520,6 +537,7 @@ function ProductFormModal({
           photos={form.photos}
           onChange={(photos) => setForm((prev) => ({ ...prev, photos }))}
           error={getFieldError(errors, "photos")}
+          data-testid="product-photo-editor"
         />
 
         <div className="form-grid">
@@ -533,6 +551,7 @@ function ProductFormModal({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, calories: event.target.value }))
               }
+              data-testid="product-calories-input"
             />
             <FieldErrorText error={getFieldError(errors, "calories")} />
           </label>
@@ -547,6 +566,7 @@ function ProductFormModal({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, proteins: event.target.value }))
               }
+              data-testid="product-proteins-input"
             />
             <FieldErrorText error={getFieldError(errors, "proteins")} />
           </label>
@@ -559,6 +579,7 @@ function ProductFormModal({
               step="0.01"
               value={form.fats}
               onChange={(event) => setForm((prev) => ({ ...prev, fats: event.target.value }))}
+              data-testid="product-fats-input"
             />
             <FieldErrorText error={getFieldError(errors, "fats")} />
           </label>
@@ -573,6 +594,7 @@ function ProductFormModal({
               onChange={(event) =>
                 setForm((prev) => ({ ...prev, carbohydrates: event.target.value }))
               }
+              data-testid="product-carbohydrates-input"
             />
             <FieldErrorText error={getFieldError(errors, "carbohydrates")} />
           </label>
@@ -586,6 +608,7 @@ function ProductFormModal({
                   category: event.target.value as ProductCategory,
                 }))
               }
+              data-testid="product-category-select"
             >
               {PRODUCT_CATEGORIES.map((category) => (
                 <option key={category} value={category}>
@@ -605,6 +628,7 @@ function ProductFormModal({
                   cooking_requirement: event.target.value as CookingRequirement,
                 }))
               }
+              data-testid="product-cooking-requirement-select"
             >
               {COOKING_REQUIREMENTS.map((option) => (
                 <option key={option} value={option}>
@@ -624,6 +648,7 @@ function ProductFormModal({
             onChange={(event) =>
               setForm((prev) => ({ ...prev, composition: event.target.value }))
             }
+            data-testid="product-composition-textarea"
           />
           <FieldErrorText error={getFieldError(errors, "composition")} />
         </label>
@@ -645,6 +670,7 @@ function ProductFormModal({
                       },
                     }))
                   }
+                  data-testid={`product-flag-${flagKey}-checkbox`}
                 />
                 <span>{FLAG_LABELS[flagKey]}</span>
               </label>

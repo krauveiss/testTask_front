@@ -177,7 +177,7 @@ describe("buildDishDraft - расчёт калорийности блюда", ()
       });
     });
 
-    it("должна обрабатывать продукт с нулевыми калориями", () => {
+    it("должна обрабатывать продукты, один из которых содержит нулевое КБЖУ", () => {
       const draft = buildDishDraft(
         "С водой",
         null,
@@ -189,6 +189,19 @@ describe("buildDishDraft - расчёт калорийности блюда", ()
       );
 
       expect(draft.calculated_nutrition.calories).toBe(120);
+    });
+
+    it("должна обрабатывать продукт с нулевым количеством калорий", () => {
+      const draft = buildDishDraft(
+        "С водой",
+        null,
+        [
+          { product_id: 3, quantity: 200 },
+        ],
+        productsMap,
+      );
+
+      expect(draft.calculated_nutrition.calories).toBe(0);
     });
 
     it("должна обрабатывать очень высокие калории", () => {

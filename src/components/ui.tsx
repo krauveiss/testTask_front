@@ -23,6 +23,7 @@ interface ModalProps extends PropsWithChildren {
   subtitle?: string;
   onClose: () => void;
   actions?: ReactNode;
+  "data-testid"?: string;
 }
 
 interface BadgeProps {
@@ -64,6 +65,7 @@ export function Modal({
   onClose,
   actions,
   children,
+  ...rest
 }: ModalProps) {
   useEffect(() => {
     if (!open) {
@@ -85,6 +87,7 @@ export function Modal({
   return (
     <div
       className="modal-backdrop"
+      {...rest}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
